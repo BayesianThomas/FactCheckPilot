@@ -1,0 +1,607 @@
+---
+title: 'Belief Bias: Fact Checking Pilot'
+author: "Cognitive Data Science Lab"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r load-packages, message = FALSE, warning = FALSE}
+library(tidyverse)
+library(tinytex)
+library(ggplot2)
+library(ggpubr)
+
+data <- read.csv("C:\\Program Files\\RStudio\\Projects\\FactCheckNorming-Verifiability-RAW.csv")
+data2 <- read.csv("C:\\Program Files\\RStudio\\Projects\\FactCheckNorming-Partisanship-RAW.csv")
+```
+
+## Data Cleaning and Transformation
+```{r dataCleaning, message = FALSE, warning = FALSE}
+# See supplement for truth value sources
+claims_data <- c(
+  "1|None of the participants had guns at the capitol riot on January 6th|FALSE",
+  "2|Donald Trump won both Florida and Ohio in 2020 but lost the presidential election, which has never happened before in electoral history|FALSE",
+  "3|Manhattan District Attorney Alvin Bragg downgraded over 50% of felony charges to misdemeanors|TRUE",
+  "4|President Biden reduced America's Strategic Petroleum Reserves to the lowest level in 40 years|TRUE",
+  "5|The fastest-growing state is Republican, while the state with the highest population loss is Democratic|TRUE",
+  "6|There are a record number of new Black entrepreneurs during President Biden's presidency|TRUE",
+  "7|Inflation was 9% when President Biden took office|FALSE",
+  "8|Gas prices were over $5 a gallon on average when President Biden took office|FALSE",
+  "9|Gun manufacturers are the only industry in the country that have immunity from lawsuits|FALSE",
+  "10|The Second Amendment has always limited the type of people who could own a gun and what type of weapon they could own|FALSE",
+  "11|Donald Trump's impeachment had the most support from members of both parties, making it the most bipartisan impeachment in American history|TRUE",
+  "12|The Trump administration facilitated the release of 5,000 Taliban prisoners|TRUE",
+  "13|President Trump presided over the largest budget deficit in U.S. history|TRUE",
+  "14|Some states allow abortions after birth|FALSE",
+  "15|No one with a concealed carry permit has ever committed a mass shooting|FALSE",
+  "16|There are more children in Border Patrol custody under Biden than during the peak of Trump's presidency|TRUE",
+  "17|Donald Trump told people to inject bleach to combat COVID-19|FALSE",
+  "18|President Biden has pardoned thousands of people jailed for marijuana possession|FALSE",
+  "19|Wage increases outpaced inflation during Biden's presidency|FALSE",
+  "20|During Trump's presidency, there were no terrorist attacks on American soil|FALSE",
+  "21|Trump built over 500 miles of border wall|FALSE",
+  "22|Law enforcement officers were killed on January 6th|FALSE",
+  "23|President Biden has decreased the federal deficit by over a trillion dollars|FALSE",
+  "24|Over 1000 people have been charged with a crime in relation to the capitol riots on January 6th|TRUE",
+  "25|Biden appointed more African American women to federal judgeships than every other president combined|FALSE",
+  "26|Biden has declared a national emergency on climate change|FALSE",
+  "27|The largest contributor to the national debt is the Trump tax cuts|FALSE",
+  "28|The U.S. has spent more money aiding Ukraine than it has spent on the war in Afghanistan|FALSE",
+  "29|Under President Trump's administration, unemployment fell to a 17-year low|TRUE",
+  "30|African American unemployment was lower under Trump than Biden|FALSE",
+  "31|In Trump's final year in office, the murder rate rose to the highest levels in 20 years|TRUE",
+  "32|Corporate profits hit an all-time high during Trump's presidency|TRUE",
+  "33|Tech company valuations as measured by the NASDAQ doubled during Trump's presidency|TRUE",
+  "34|Wage increases outpaced inflation during Trump's presidency|TRUE",
+  "35|The number of people without health insurance increased by over 3 million during Trump's presidency|TRUE",
+  "36|Coal mining jobs increased during Trump's presidency|FALSE",
+  "37|During Biden's presidency, the U.S. experienced the highest inflation rates in its history|FALSE",
+  "38|Democrats scheduled Transgender Visibility Day to coincide with Easter Sunday|FALSE",
+  "39|After Obama was reelected Donald Trump stated the election was a sham and that Americans should march on Washington|TRUE",
+  "40|Donald Trump has stated that women that violate state abortion bans should be prosecuted|FALSE",
+  "41|During Biden's presidency, U.S crude oil production has decreased|FALSE",
+  "42|During Biden's presidency, the economy has expanded every year|TRUE",
+  "43|During Biden's presidency, over a million people have been removed from a government assistance program to help pay for groceries|TRUE",
+  "44|During Biden's presidency, the number of apprehensions of migrants at the southern border have reached an all-time high|TRUE",
+  "45|During Biden's presidency, corporate profits have reached an all-time high|TRUE",
+  "46|There are over 10 million migrants living in the U.S. illegally|TRUE",
+  "47|New York leads the nation with the lowest imprisonment rate of any large state|TRUE",
+  "48|After passing a permitless open-carry gun law in West Virginia, the homicide rate dropped by over 30%|FALSE",
+  "49|During Biden's presidency, manufacturing jobs have increased by over 750,000|TRUE",
+  "50|During Trump's presidency he deported fewer people than Barack Obama|TRUE",
+  "51|There were no COVID-19 vaccines available when President Biden took office|FALSE",
+  "52|During Biden's presidency, the U.S. had lower inflation than all other advanced economies|FALSE",
+  "53|Over 700 people have plead guilty to charges related to the capitol riot on January 6th|TRUE",
+  "54|Every pro-life governor that was up for re-election in 2022 won their race|TRUE",
+  "55|J.D. Vance sent a letter to the Department of Justice stating a law should be enforced that would ban the mailing of abortion pills|TRUE",
+  "56|J.D. Vance wrote the forward for a book authored by the architect of the Project 2025 agenda|TRUE",
+  "57|J.D. Vance has a rent-a-dog given to him by the Trump campaign to make him seem more like a dog person|FALSE",
+  "58|Tim Walz falsely claimed he had carried weapons in war during his military service|TRUE",
+  "59|Project 2025 calls for the registration of all pregnant women with a federal agency|FALSE",
+  "60|Kamala Harris once bragged about being able to ruin people's lives with the swipe of a pen|FALSE",
+  "61|Median household income increased during Trump's four years in office, even after adjusting for inflation|TRUE",
+  "62|Gold contains 79 protons|NA",
+  "63|The 27th Amendment to the U.S. Constitution states, that if Congress passes a law to change its own pay, the change won't take effect until after the next election for the House of Representatives|NA",
+  "64|Leonardo da Vinci's 'Mona Lisa' has no visible eyelashes or eyebrows|NA",
+  "65|The Eiffel Tower is located in New York City|NA",
+  "66|The speed of light is slower than the speed of sound|NA",
+  "67|There are an even number of particles in the Universe|NA",
+  "68|There are exactly 12,356,138 birds in flight over the continental United States right now|NA",
+  "69|Every person's experience of the color red is identical|NA",
+  "70|Consciousness is an emergent property of the universe itself|NA",
+  "71|The essence of nature is joy|NA"
+)
+
+claims_df <- tibble(claims_data) %>%
+  separate(claims_data, into = c("Claim_Num", "Claim", "Truth_Value"), sep = "\\|") %>%
+  mutate(
+    Claim_Num = as.numeric(Claim_Num),
+    Truth_Value = ifelse(Truth_Value == "NA", NA, Truth_Value)  # NA values for benchmarking items
+)
+# Pulling from pilot 1 on verifiability
+df <- data %>%
+  slice(-c(2, 3, 4)) %>%  # Removing survey testers and metadata
+  mutate(ResponseId = row_number() - 1) %>%
+  select(ResponseId, 
+         Duration..in.seconds., 
+         X25_checkability:X95_checkability, 
+         age, gender, race, education, poliOrient, forcedPartyChoice) %>%
+  rename_with(
+    .cols = X25_checkability:X95_checkability, 
+    .fn = ~ paste0("Claim_", claims_df$Claim_Num) 
+  )
+
+# Pulling data from pilot 2 on partisanship
+df2 <- data2 %>% 
+  slice(-c(1:2)) %>% # Removing Qualtrics metadata
+  mutate(ResponseId = row_number()) %>% 
+  select(ResponseId,
+         Duration..in.seconds.,
+         X1_truthProb:X61_truthProb,
+         X1_partyFavorability:X61_partyFavorability,
+         X1_previouslySeen:X61_previouslySeen,
+         age, gender, race, education, poliOrient, forcedChoiceParty) %>% 
+  rename_with(
+    .cols = contains("truthProb"), 
+    .fn = ~ paste0("TruthProb_Claim_", seq_along(.))) %>%
+  rename_with(
+    .cols = contains("partyFavorability"), 
+    .fn = ~ paste0("PartyFavorability_Claim_", seq_along(.))) %>%
+  rename_with(
+    .cols = contains("previouslySeen"), 
+    .fn = ~ paste0("PreviouslySeen_Claim_", seq_along(.))) %>% 
+  rename(forcedPartyChoice = forcedChoiceParty) # Fixing Qualtrics typo
+
+df2$TruthProb_Claim_37[10] <- 100 # participant typo
+```
+
+```{r recoding, message = FALSE, warning = FALSE}
+# Recoding verfiability pilot
+df <- df %>%  
+  slice(-1) %>% # Removing column titles imported from Qualtrics
+  mutate(across(3:73, ~ case_when(
+    . == "Could determine with complete confidence" ~ 3,
+    . == "Could determine with high confidence" ~ 2,
+    . == "Could determine with some confidence" ~ 1,
+    . == "Could not determine with any confidence" ~ 0,
+    TRUE ~ NA_real_ 
+  ))) %>%
+  mutate(forcedPartyChoice = case_when(
+    forcedPartyChoice == "Strongly Democratic" ~ -3,
+    forcedPartyChoice == "Democratic" ~ -2,
+    forcedPartyChoice == "Leaning Democratic" ~ -1,
+    forcedPartyChoice == "Leaning Republican" ~ 1,
+    forcedPartyChoice == "Republican" ~ 2,
+    forcedPartyChoice == "Strongly Republican" ~ 3,
+    TRUE ~ NA_real_
+  ))
+
+# Recoding partisanship pilot
+df2 <- df2 %>% 
+  mutate(across(3:185, ~ case_when(
+    is.na(.) ~ NA_real_,  # Keeps existing NAs as NA
+    . == "Yes" ~ 1, # Recoding previously seen
+    . == "Unsure" ~ 2,
+    . == "No" ~ 3,
+    . == "More favorable for Democrats" ~ -2, # Recoding party favorability
+    . == "Somewhat more favorable for Democrats" ~ -1,
+    . == "Not clearly more favorable for Democrats or Republicans" ~ 0,
+    . == "Somewhat more favorable for Republicans" ~ 1,
+    . == "More favorable for Republicans" ~ 2,
+    TRUE ~ as.numeric(.) # Keeps truth_Prob
+  ))) %>%
+  mutate(forcedPartyChoice = case_when(
+    forcedPartyChoice == "Strongly Democratic" ~ -3,
+    forcedPartyChoice == "Democratic" ~ -2,
+    forcedPartyChoice == "Leaning Democratic" ~ -1,
+    forcedPartyChoice == "Leaning Republican" ~ 1,
+    forcedPartyChoice == "Republican" ~ 2,
+    forcedPartyChoice == "Strongly Republican" ~ 3,
+    TRUE ~ NA_real_
+  ))
+```
+
+```{r, partisanship, message = FALSE, warning = FALSE}
+partisanship_data <- df %>%
+  
+  pivot_longer(
+    cols = starts_with("Claim_"),
+    names_to = "Claim_Num",
+    values_to = "Response",
+    names_prefix = "Claim_" 
+  ) %>%
+  
+  mutate(Claim_Num = as.numeric(Claim_Num)) %>%
+  
+  left_join(
+    claims_df %>% mutate(Claim_Num = as.numeric(Claim_Num)), 
+    by = "Claim_Num"
+  ) %>%
+  
+  # Summarise overall averages for each claim
+  group_by(Claim_Num, Claim, Truth_Value) %>%
+  summarise(Overall_Average = mean(Response, na.rm = TRUE)) %>%
+  
+  # Calculate averages for conservatives (1, 2, 3)
+  left_join(
+    df %>%
+      filter(forcedPartyChoice %in% c(1, 2, 3)) %>%
+      pivot_longer(
+        cols = starts_with("Claim_"),
+        names_to = "Claim_Num",
+        values_to = "Response",
+        names_prefix = "Claim_"
+      ) %>%
+      mutate(Claim_Num = as.numeric(Claim_Num)) %>%
+      group_by(Claim_Num) %>%
+      summarise(Conservative_Average = mean(Response, na.rm = TRUE)),
+    by = "Claim_Num"
+  ) %>%
+  
+  # Calculate averages for liberals (-1, -2, -3)
+  left_join(
+    df %>%
+      filter(forcedPartyChoice %in% c(-1, -2, -3)) %>%
+      pivot_longer(
+        cols = starts_with("Claim_"),
+        names_to = "Claim_Num",
+        values_to = "Response",
+        names_prefix = "Claim_"
+      ) %>%
+      mutate(Claim_Num = as.numeric(Claim_Num)) %>%
+      group_by(Claim_Num) %>%
+      summarise(Liberal_Average = mean(Response, na.rm = TRUE)),
+    by = "Claim_Num"
+  ) %>%
+  
+  # Add the balanced average (between conservatives and liberals)
+  mutate(Balanced_Average = (Conservative_Average + Liberal_Average) / 2) %>%
+  
+  ungroup()
+```
+
+## Summaries
+```{r summaries, message = FALSE, warning = FALSE}
+party_counts <- bind_rows(
+  df %>%
+    summarise(
+      Pilot = "Verifiability",
+      Total_Participants = n(),
+      Conservative_Count = sum(forcedPartyChoice %in% c(1, 2, 3), na.rm = TRUE),
+      Liberal_Count = sum(forcedPartyChoice %in% c(-1, -2, -3), na.rm = TRUE),       
+      Extreme_Conservative_Count = sum(forcedPartyChoice == 3, na.rm = TRUE),
+      Extreme_Liberal_Count = sum(forcedPartyChoice == -3, na.rm = TRUE)
+    ),
+  
+  df2 %>%
+    summarise(
+      Pilot = "Partisanship",
+      Total_Participants = n(),
+      Conservative_Count = sum(forcedPartyChoice %in% c(1, 2, 3), na.rm = TRUE),
+      Liberal_Count = sum(forcedPartyChoice %in% c(-1, -2, -3), na.rm = TRUE),       
+      Extreme_Conservative_Count = sum(forcedPartyChoice == 3, na.rm = TRUE),
+      Extreme_Liberal_Count = sum(forcedPartyChoice == -3, na.rm = TRUE)
+    )
+)
+
+# Composite score for unverifiability items to create a single benchmark score
+unverifiable_benchmark <- partisanship_data  %>%
+  slice(setdiff(67:71, 69)) %>% # Selecting unverifiable items
+  summarise(Composite_Average = mean(Balanced_Average, na.rm = TRUE)) %>%
+  pull(Composite_Average)
+
+# Composite score for verifiability items to create a single benchmark score
+verifiable_benchmark <- partisanship_data  %>%
+  slice(63:66) %>% # Selecting verifiable items
+  summarise(Composite_Average = mean(Balanced_Average, na.rm = TRUE)) %>%
+  pull(Composite_Average)
+
+# Verfiability score: Equally weighting R and D perceptions of verfiability, scaled to fit benchmarks
+partisanship_data$Verifiability_Index <- (partisanship_data$Balanced_Average - unverifiable_benchmark) / 
+                                    (verifiable_benchmark - unverifiable_benchmark) * 100
+```
+
+### Determining the likelihood of inter-party agreement on the verifiability of each claim
+```{r agreementSimulation, message = FALSE, warning = FALSE}
+n_sim <- 1e6
+
+simulate_agreement <- function(liberal_dist, conservative_dist, n_sim) {
+  liberal_samples <- sample(0:3, size = n_sim, replace = TRUE, prob = liberal_dist)
+  conservative_samples <- sample(0:3, size = n_sim, replace = TRUE, prob = conservative_dist)
+  sum(liberal_samples == conservative_samples) / n_sim
+}
+
+liberal_proportions <- tibble()
+conservative_proportions <- tibble()
+agreement_probs <- numeric(71)
+
+for (i in 1:71) {
+  checkability_item <- paste0("Claim_", i)
+  
+  liberal_dist_table <- df %>%
+    filter(forcedPartyChoice %in% c(-1, -2, -3)) %>%
+    pull(!!sym(checkability_item)) %>%
+    factor(levels = 0:3) %>%
+    table() %>%
+    prop.table()
+
+  liberal_proportions <- bind_rows(liberal_proportions, 
+                                      tibble(Checkability_Item = checkability_item, 
+                                             No_Confidence = liberal_dist_table[1], 
+                                             Some_Confidence = liberal_dist_table[2], 
+                                             High_Confidence = liberal_dist_table[3], 
+                                             Complete_Confidence = liberal_dist_table[4]))
+
+  conservative_dist_table <- df %>%
+    filter(forcedPartyChoice %in% c(1, 2, 3)) %>%
+    pull(!!sym(checkability_item)) %>%
+    factor(levels = 0:3) %>%
+    table() %>%
+    prop.table()
+  
+  conservative_proportions <- bind_rows(conservative_proportions, 
+                                        tibble(Checkability_Item = checkability_item, 
+                                               No_Confidence = conservative_dist_table[1], 
+                                               Some_Confidence = conservative_dist_table[2], 
+                                               High_Confidence = conservative_dist_table[3], 
+                                               Complete_Confidence = conservative_dist_table[4]))
+
+  agreement_probs[i] <- simulate_agreement(liberal_dist_table, conservative_dist_table, n_sim)
+}
+
+partisanship_data <- partisanship_data %>%
+  mutate(Agreement_Prob = agreement_probs)
+```
+
+```{r exploratory, eval = FALSE}
+partisanship_data %>%
+  select(Checkability_Item, Agreement_Prob) %>%
+  arrange(desc(Agreement_Prob)) %>%
+  print(n = Inf)
+
+partisanship_data %>%
+  select(Agreement_Prob) %>%
+  pull(Agreement_Prob) %>%
+  cat(sep = "\n")
+
+partisanship_data %>%
+  select(Verifiability_Score) %>%
+  pull(Verifiability_Score) %>%
+  cat(sep = "\n")
+
+partisanship_data %>%
+  select(Partisan_Checkable) %>%
+  pull(Partisan_Checkable) %>%
+  cat(sep = "\n")
+
+#Exploratory
+averageVerifiability <- partisanship_data  %>%
+  slice(1:61) %>%
+  summarise(Composite_Average = mean(Balanced_Average, na.rm = TRUE)) %>%
+  pull(Composite_Average)
+
+filtered_data <- partisanship_data %>%
+  filter(Partisan_Checkable > 26)
+
+left_join(
+    df %>%
+      filter(forcedPartyChoice == 3) %>%
+      pivot_longer(
+        cols = starts_with("Claim_"),
+        names_to = "Claim_Num",
+        values_to = "Response",
+        names_prefix = "Claim_"
+      ) %>%
+      mutate(Claim_Num = as.numeric(Claim_Num)) %>%
+      group_by(Claim_Num) %>%
+      summarise(Extreme_Conservative_Average = mean(Response, na.rm = TRUE)),
+    by = "Claim_Num"
+  ) %>%
+  
+   # Calculate averages for extreme liberals (-3)
+  left_join(
+    df %>%
+      filter(forcedPartyChoice == -3) %>%
+      pivot_longer(
+        cols = starts_with("Claim_"),
+        names_to = "Claim_Num",
+        values_to = "Response",
+        names_prefix = "Claim_"
+      ) %>%
+      mutate(Claim_Num = as.numeric(Claim_Num)) %>%
+      group_by(Claim_Num) %>%
+      summarise(Extreme_Liberal_Average = mean(Response, na.rm = TRUE)),
+    by = "Claim_Num"
+  )
+```
+
+```{r favorability_priors, message = FALSE, warning= FALSE}
+# Intializing vector for loop, 61:71 are benchmarks so NA
+dem_favorability <- rep(NA, 71)
+rep_favorability <- rep(NA, 71)
+overall_priors <- rep(NA, 71)
+dem_priors <- rep(NA, 71)
+rep_priors <- rep(NA, 71)
+Dem_Unfamiliarity <- rep(NA, 71)
+Rep_Unfamiliarity <- rep(NA, 71)
+
+for (i in 1:61) {
+
+  prev_col <- paste0("PreviouslySeen_Claim_", i)
+  truth_col <- paste0("TruthProb_Claim_", i)
+  favor_col <- paste0("PartyFavorability_Claim_", i)
+  
+  dem_favorability[i] <- df2 %>%
+      filter(forcedPartyChoice %in% c(-3, -2, -1)) %>%
+      pull(!!sym(favor_col)) %>%
+      # Inverting Dem scale represents percentage, positive values more D favorable
+      mean(na.rm = TRUE) / -2
+  
+  rep_favorability[i] <- df2 %>%
+      filter(forcedPartyChoice %in% c(3, 2, 1)) %>%
+      pull(!!sym(favor_col)) %>%
+      mean(na.rm = TRUE) / 2 # Represents percentage, positive values more R favorable
+  
+  overall_priors[i] <- df2 %>%
+      pull(!!sym(truth_col)) %>%
+      mean(na.rm = TRUE)
+  
+  dem_priors[i] <- df2 %>%
+      filter(forcedPartyChoice %in% c(-3, -2, -1)) %>%
+      pull(!!sym(truth_col)) %>%
+      mean(na.rm = TRUE)
+  
+  rep_priors[i] <- df2 %>%
+      filter(forcedPartyChoice %in% c(3, 2, 1)) %>%
+      pull(!!sym(truth_col)) %>%
+      mean(na.rm = TRUE)
+  
+  Dem_Unfamiliarity[i] <- df2 %>%
+      filter(forcedPartyChoice %in% c(-3, -2, -1)) %>%
+      pull(!!sym(prev_col)) %>%
+      mean(na.rm = TRUE)
+  
+  Rep_Unfamiliarity[i] <- df2 %>%
+      filter(forcedPartyChoice %in% c(3, 2, 1)) %>%
+      pull(!!sym(prev_col)) %>%
+      mean(na.rm = TRUE)
+  
+}
+
+partisanship_data <- partisanship_data %>%
+  mutate(
+    Dem_Favorability = dem_favorability,
+    Rep_Favorability = rep_favorability,
+    Overall_Priors = overall_priors,
+    Dem_Priors = dem_priors,
+    # Converting priors into strength of belief
+    Dem_Truthiness = ifelse(Dem_Priors < 50, 100 - Dem_Priors, Dem_Priors),
+    # Preserving truth values
+    Dem_Belief = ifelse(Dem_Priors > 50, TRUE, FALSE),
+    Rep_Priors = rep_priors,
+    Rep_Truthiness = ifelse(Rep_Priors < 50, 100 - Rep_Priors, Rep_Priors),
+    Rep_Belief = ifelse(Rep_Priors > 50, TRUE, FALSE),
+    Dem_Unfamiliar = Dem_Unfamiliarity,
+    Rep_Unfamiliar = Rep_Unfamiliarity
+  )
+```
+
+```{r probPartisanSeenClaim}
+# Determining the probability Dems and Reps have seen the claim fact checked before
+liberal_prop_seen <- tibble()
+conserv_prop_seen <- tibble()
+Prob_R_Seen <- rep(NA, 71)
+Prob_D_Seen <- rep(NA, 71)
+
+for (i in 1:61) {
+  prev_seen <- paste0("PreviouslySeen_Claim_", i)
+  
+  liberal_dist_table <- df2 %>%
+    filter(forcedPartyChoice %in% c(-1, -2, -3)) %>%
+    pull(!!sym(prev_seen)) %>%
+    factor(levels = 1:3) %>%
+    table() %>%
+    prop.table()
+
+  liberal_prop_seen <- bind_rows(liberal_prop_seen, 
+                                 tibble(Previously_Seen = prev_seen, 
+                                        Yes = liberal_dist_table[["1"]],
+                                        Unsure = liberal_dist_table[["2"]],  
+                                        No = liberal_dist_table[["3"]])) 
+  
+  Prob_D_Seen[i] <- liberal_dist_table[["1"]]  
+  
+  conservative_dist_table <- df2 %>%
+    filter(forcedPartyChoice %in% c(1, 2, 3)) %>%
+    pull(!!sym(prev_seen)) %>%
+    factor(levels = 1:3) %>%
+    table() %>%
+    prop.table()
+  
+  conserv_prop_seen <- bind_rows(conserv_prop_seen, 
+                                 tibble(Previously_Seen = prev_seen, 
+                                        Yes = conservative_dist_table[["1"]],
+                                        Unsure = conservative_dist_table[["2"]],  
+                                        No = conservative_dist_table[["3"]])) 
+  
+  Prob_R_Seen[i] <- conservative_dist_table[["1"]]
+}
+
+partisanship_data$Prob_D_Seen <- Prob_D_Seen
+partisanship_data$Prob_R_Seen <- Prob_R_Seen
+```
+
+```{r itemSelection}
+dem_item_selection <- partisanship_data %>%
+  filter(
+    (Dem_Favorability * Rep_Favorability < 0) & # Negative value = agreement on favorability
+    Dem_Favorability >= .5 & # Mean was .5 for Tappin et al.
+    Verifiability_Index > 75 & # Excludes bottom quartile
+    Agreement_Prob > .29  # Excludes bottom quartile
+  )
+
+rep_item_selection <- partisanship_data %>%
+  filter(
+    (Dem_Favorability * Rep_Favorability < 0) &
+    Rep_Favorability >= .35 & 
+    Verifiability_Index > 75 &
+    Agreement_Prob > .27 
+    #& Claim_Num != 61
+  )
+
+{cat(sprintf("%35s", "Probability of Agreement\n")); summary(partisanship_data$Agreement_Prob[1:61])}
+{cat(sprintf("\n%30s", "Verifiability\n")); summary(partisanship_data$Verifiability_Index[1:61])}
+{cat(sprintf("\n%30s", "Rep Favorable\n")); summary(rep_item_selection$Rep_Favorability);}
+{cat(sprintf("\n%30s", "Dem Favorable\n")); summary(dem_item_selection$Dem_Favorability);}
+{cat(sprintf("\n%30s", "Prob Rep Seen\n")); summary(rep_item_selection$Prob_R_Seen);}
+{cat(sprintf("\n%30s", "Prob Dem Seen\n")); summary(dem_item_selection$Prob_D_Seen);}
+{cat(sprintf("\n%30s", "Rep Priors\n")); summary(rep_item_selection$Rep_Priors);}
+{cat(sprintf("\n%30s", "Dem Priors\n")); summary(dem_item_selection$Dem_Priors);}
+{cat(sprintf("\n%30s", "Rep Familiar\n")); summary(rep_item_selection$Rep_Unfamiliar);}
+{cat(sprintf("\n%30s", "Dem Familiar\n")); summary(dem_item_selection$Dem_Unfamiliar);}
+
+partisanship_data %>%
+  filter(Rep_Belief == TRUE) %>%
+  summarize(
+    mean = mean(Rep_Priors, na.rm = TRUE),
+    median = median(Rep_Priors, na.rm = TRUE),
+    sd = sd(Rep_Priors, na.rm = TRUE),
+    min = min(Rep_Priors, na.rm = TRUE),
+    max = max(Rep_Priors, na.rm = TRUE),
+    count = n()
+  )
+```
+
+```{r priorXfavorability, message = FALSE, warning= FALSE, eval = FALSE}
+ggplot(partisanship_data[1:61,]) +
+  geom_point(aes(x = Dem_Favorability, y = Dem_Priors, color = 'Democrats')) +
+  geom_smooth(aes(x = Dem_Favorability, y = Dem_Priors, color = 'Democrats'), 
+              method = "lm", se = FALSE) +
+  stat_regline_equation(aes(x = Dem_Favorability, y = Dem_Priors, label = ..eq.label..), 
+                        color = "blue", label.x = -1, label.y = 70) +
+  stat_regline_equation(aes(x = Dem_Favorability, y = Dem_Priors, label = ..rr.label..), 
+                        color = "blue", label.x = -1, label.y = 65) +
+  
+  geom_point(aes(x = Rep_Favorability, y = Rep_Priors, color = 'Republicans')) +
+  geom_smooth(aes(x = Rep_Favorability, y = Rep_Priors, color = 'Republicans'), 
+              method = "lm", se = FALSE) +
+  stat_regline_equation(aes(x = Rep_Favorability, y = Rep_Priors, label = ..eq.label..), 
+                        color = "red", label.x = -1, label.y = 80) +
+  stat_regline_equation(aes(x = Rep_Favorability, y = Rep_Priors, label = ..rr.label..), 
+                        color = "red", label.x = -1, label.y = 75) +
+  
+  labs(x = "Party Favorability (-1 = Unfavorable, 1 = Favorable)", 
+       y = "Prior Belief (0 = False, 100 = True)", 
+       title = "How Party Favorability of Political Claims is Associated with Beliefs", 
+       subtitle = "Each point represents the average favorability and prior belief for each political statement", 
+       color = "Affiliation") +
+  
+  scale_color_manual(values = c('Democrats' = 'blue', 'Republicans' = 'red')) +
+  
+  scale_x_continuous(breaks = seq(-1, 1, by = 0.5), limits = c(-1, 1)) +
+  scale_y_continuous(breaks = seq(5, 80, by = 15), limits = c(4, 83)) +
+  
+  theme_minimal()
+```
+
+
+```{r partisanshipSummary, message = FALSE, warning= FALSE}
+partisanship_summary <- data.frame(
+  Metric = c("Overall Truthiness", "Percentage Correct")
+) %>%
+  mutate(
+    Democrats = c(mean(partisanship_data$Dem_Truthiness, na.rm = TRUE),
+                  sum(partisanship_data$Dem_Belief == partisanship_data$Truth_Value, na.rm = TRUE) / 
+                  length(na.omit(partisanship_data$Dem_Belief)) * 100),
+    
+    Republicans = c(mean(partisanship_data$Rep_Truthiness, na.rm = TRUE),
+                    sum(partisanship_data$Rep_Belief == partisanship_data$Truth_Value, na.rm = TRUE) / 
+                    length(na.omit(partisanship_data$Rep_Belief)) * 100)
+  )
+
+```
+
+
