@@ -159,6 +159,21 @@ df <- df %>%
     TRUE ~ NA_real_
   ))
 
+
+# Confused Ps who put could not fact check more than once, obviously fact checkable items
+df <- df %>%
+  filter(
+    rowSums(across(c(Claim_63, Claim_64, Claim_65, Claim_66), ~ . == 0 & !is.na(.))) < 2
+  )
+
+# Confused Ps who put could with complete confidence fact check more than once for obviously not fact checkable items
+df <- df %>%
+  filter(
+    rowSums(across(c(Claim_67, Claim_68, Claim_70, Claim_71), ~ . == 3 & !is.na(.))) < 2
+  )
+
+
+
 # Recoding partisanship pilot
 df2 <- df2 %>% 
   mutate(across(3:185, ~ case_when(
@@ -202,8 +217,8 @@ partisanship_data <- df %>%
   ) %>%
   
   # Summarise overall averages for each claim
-  group_by(Claim_Num, Claim, Truth_Value) %>%
-  summarise(Overall_Average = mean(Response, na.rm = TRUE)) %>%
+   group_by(Claim_Num, Claim, Truth_Value) %>%
+   summarise(Overall_Average = mean(Response, na.rm = TRUE)) %>%
   
   # Calculate averages for conservatives (1, 2, 3)
   left_join(
@@ -273,6 +288,7 @@ unverifiable_benchmark <- partisanship_data  %>%
   summarise(Composite_Average = mean(Balanced_Average, na.rm = TRUE)) %>%
   pull(Composite_Average)
 
+# Verifiable benchmarks
 # Composite score for verifiability items to create a single benchmark score
 verifiable_benchmark <- partisanship_data  %>%
   slice(63:66) %>% # Selecting verifiable items
@@ -282,23 +298,24 @@ verifiable_benchmark <- partisanship_data  %>%
 # Verfiability score: Equally weighting R and D perceptions of verfiability, scaled to fit benchmarks
 partisanship_data$Verifiability_Index <- (partisanship_data$Balanced_Average - unverifiable_benchmark) / 
                                     (verifiable_benchmark - unverifiable_benchmark) * 100
+
 ```
 
 ### Determining the likelihood of inter-party agreement on the verifiability of each claim
-```{r agreementSimulation, message = FALSE, warning = FALSE}
-n_sim <- 1e6
+```{r agreement, message = FALSE, warning = FALSE}
 
-simulate_agreement <- function(liberal_dist, conservative_dist, n_sim) {
-  liberal_samples <- sample(0:3, size = n_sim, replace = TRUE, prob = liberal_dist)
-  conservative_samples <- sample(0:3, size = n_sim, replace = TRUE, prob = conservative_dist)
-  sum(liberal_samples == conservative_samples) / n_sim
+agreement_per_level <- function(liberal_dist, conservative_dist) {
+  liberal_dist * conservative_dist
 }
 
+# Percentage of each party that choose each level
 liberal_proportions <- tibble()
 conservative_proportions <- tibble()
-agreement_probs <- numeric(71)
+# agreement between R and D per level for each claim
+agreement_summary <- tibble()
 
 for (i in 1:71) {
+  
   checkability_item <- paste0("Claim_", i)
   
   liberal_dist_table <- df %>%
@@ -307,13 +324,13 @@ for (i in 1:71) {
     factor(levels = 0:3) %>%
     table() %>%
     prop.table()
-
+  
   liberal_proportions <- bind_rows(liberal_proportions, 
-                                      tibble(Checkability_Item = checkability_item, 
-                                             No_Confidence = liberal_dist_table[1], 
-                                             Some_Confidence = liberal_dist_table[2], 
-                                             High_Confidence = liberal_dist_table[3], 
-                                             Complete_Confidence = liberal_dist_table[4]))
+                                   tibble(Checkability_Item = i,
+                                          No_Confidence = liberal_dist_table[1], 
+                                          Some_Confidence = liberal_dist_table[2], 
+                                          High_Confidence = liberal_dist_table[3], 
+                                          Complete_Confidence = liberal_dist_table[4]))
 
   conservative_dist_table <- df %>%
     filter(forcedPartyChoice %in% c(1, 2, 3)) %>%
@@ -323,17 +340,27 @@ for (i in 1:71) {
     prop.table()
   
   conservative_proportions <- bind_rows(conservative_proportions, 
-                                        tibble(Checkability_Item = checkability_item, 
+                                        tibble(Checkability_Item = i,
                                                No_Confidence = conservative_dist_table[1], 
                                                Some_Confidence = conservative_dist_table[2], 
                                                High_Confidence = conservative_dist_table[3], 
                                                Complete_Confidence = conservative_dist_table[4]))
 
-  agreement_probs[i] <- simulate_agreement(liberal_dist_table, conservative_dist_table, n_sim)
+  agreement_at_levels <- agreement_per_level(liberal_dist_table, conservative_dist_table)
+  total_agreement <- sum(agreement_at_levels)
+  
+  agreement_summary <- bind_rows(agreement_summary, 
+                                 tibble(Checkability_Item = i,
+                                        No_Confidence = agreement_at_levels[1], 
+                                        Some_Confidence = agreement_at_levels[2], 
+                                        High_Confidence = agreement_at_levels[3], 
+                                        Complete_Confidence = agreement_at_levels[4], 
+                                        Total_Agreement = total_agreement))
 }
 
 partisanship_data <- partisanship_data %>%
-  mutate(Agreement_Prob = agreement_probs)
+  left_join(select(agreement_summary, Checkability_Item, Total_Agreement), 
+            by = c("Claim_Num" = "Checkability_Item"))
 ```
 
 ```{r exploratory, eval = FALSE}
@@ -469,6 +496,26 @@ partisanship_data <- partisanship_data %>%
   )
 ```
 
+```{r}
+partisanship_data <- partisanship_data %>%
+  mutate(
+    Dem_News = case_when(
+      Truth_Value == TRUE & Dem_Favorability > 0 ~ "Good News",
+      Truth_Value == TRUE & Dem_Favorability < 0 ~ "Bad News",
+      Truth_Value == FALSE & Dem_Favorability > 0 ~ "Bad News",
+      Truth_Value == FALSE & Dem_Favorability < 0 ~ "Good News",
+      TRUE ~ NA_character_
+    ),
+    Rep_News = case_when(
+      Truth_Value == TRUE & Rep_Favorability > 0 ~ "Good News",
+      Truth_Value == TRUE & Rep_Favorability < 0 ~ "Bad News",
+      Truth_Value == FALSE & Rep_Favorability > 0 ~ "Bad News",
+      Truth_Value == FALSE & Rep_Favorability < 0 ~ "Good News",
+      TRUE ~ NA_character_
+    )
+  )
+```
+
 ```{r probPartisanSeenClaim}
 # Determining the probability Dems and Reps have seen the claim fact checked before
 liberal_prop_seen <- tibble()
@@ -518,22 +565,30 @@ partisanship_data$Prob_R_Seen <- Prob_R_Seen
 dem_item_selection <- partisanship_data %>%
   filter(
     (Dem_Favorability * Rep_Favorability < 0) & # Negative value = agreement on favorability
-    Dem_Favorability >= .5 & # Mean was .5 for Tappin et al.
-    Verifiability_Index > 75 & # Excludes bottom quartile
-    Agreement_Prob > .29  # Excludes bottom quartile
+    Dem_Favorability > .50 & 
+    Liberal_Average >= 2.01 & 
+    Total_Agreement > .30  # Excludes bottom quartile
   )
 
 rep_item_selection <- partisanship_data %>%
   filter(
     (Dem_Favorability * Rep_Favorability < 0) &
-    Rep_Favorability >= .35 & 
-    Verifiability_Index > 75 &
-    Agreement_Prob > .27 
-    #& Claim_Num != 61
+    Rep_Favorability >= .50 & 
+    Conservative_Average >= 1.9 &
+    Total_Agreement > .30
   )
 
-{cat(sprintf("%35s", "Probability of Agreement\n")); summary(partisanship_data$Agreement_Prob[1:61])}
-{cat(sprintf("\n%30s", "Verifiability\n")); summary(partisanship_data$Verifiability_Index[1:61])}
+partisan_items <- bind_rows(dem_item_selection, rep_item_selection)
+
+
+true_rep <- partisanship_data %>%
+  filter(
+    Truth_Value == TRUE &
+      Dem_Favorability > .17
+  )
+
+{cat(sprintf("%35s", "Probability of Agreement\n")); summary(partisanship_data$Total_Agreement[1:61])}
+{cat(sprintf("\n%30s", "Verifiability\n")); summary(partisanship_data$Conservative_Average[1:61])}
 {cat(sprintf("\n%30s", "Rep Favorable\n")); summary(rep_item_selection$Rep_Favorability);}
 {cat(sprintf("\n%30s", "Dem Favorable\n")); summary(dem_item_selection$Dem_Favorability);}
 {cat(sprintf("\n%30s", "Prob Rep Seen\n")); summary(rep_item_selection$Prob_R_Seen);}
@@ -543,20 +598,122 @@ rep_item_selection <- partisanship_data %>%
 {cat(sprintf("\n%30s", "Rep Familiar\n")); summary(rep_item_selection$Rep_Unfamiliar);}
 {cat(sprintf("\n%30s", "Dem Familiar\n")); summary(dem_item_selection$Dem_Unfamiliar);}
 
-partisanship_data %>%
-  filter(Rep_Belief == TRUE) %>%
-  summarize(
-    mean = mean(Rep_Priors, na.rm = TRUE),
-    median = median(Rep_Priors, na.rm = TRUE),
-    sd = sd(Rep_Priors, na.rm = TRUE),
-    min = min(Rep_Priors, na.rm = TRUE),
-    max = max(Rep_Priors, na.rm = TRUE),
-    count = n()
+
+{cat(sprintf("\n%30s", "Dem Verifiability\n")); summary(partisanship_data$D_Index[1:61])}
+{cat(sprintf("\n%30s", "Rep Verifiability\n")); summary(partisanship_data$R_Index[1:61])}
+```
+
+```{r}
+# Calculate comprehensive summary statistics for each category
+partisan_news_summary <- data.frame(
+  Metric = c("Overall Dem Verfiabile", "Dem News Good", "Dem News Bad",
+             "Overall Rep Verifiable", "Rep New Good", "Rep News Bad"),
+  
+  Mean = c(
+    mean(partisan_items$Liberal_Average, na.rm = TRUE),
+    mean(partisan_items$Liberal_Average[partisan_items$Dem_News == "Good News"], na.rm = TRUE),
+    mean(partisan_items$Liberal_Average[partisan_items$Dem_News == "Bad News"], na.rm = TRUE),
+    mean(partisan_items$Conservative_Average, na.rm = TRUE),
+    mean(partisan_items$Conservative_Average[partisan_items$Rep_News == "Good News"], na.rm = TRUE),
+    mean(partisan_items$Conservative_Average[partisan_items$Rep_News == "Bad News"], na.rm = TRUE)
+  ),
+  
+  Median = c(
+    median(partisan_items$Liberal_Average, na.rm = TRUE),
+    median(partisan_items$Liberal_Average[partisan_items$Dem_News == "Good News"], na.rm = TRUE),
+    median(partisan_items$Liberal_Average[partisan_items$Dem_News == "Bad News"], na.rm = TRUE),
+    median(partisan_items$Conservative_Average, na.rm = TRUE),
+    median(partisan_items$Conservative_Average[partisan_items$Rep_News == "Good News"], na.rm = TRUE),
+    median(partisan_items$Conservative_Average[partisan_items$Rep_News == "Bad News"], na.rm = TRUE)
+  ),
+  
+  Q1 = c(
+    quantile(partisan_items$Liberal_Average, 0.25, na.rm = TRUE),
+    quantile(partisan_items$Liberal_Average[partisan_items$Dem_News == "Good News"], 0.25, na.rm = TRUE),
+    quantile(partisan_items$Liberal_Average[partisan_items$Dem_News == "Bad News"], 0.25, na.rm = TRUE),
+    quantile(partisan_items$Conservative_Average, 0.25, na.rm = TRUE),
+    quantile(partisan_items$Conservative_Average[partisan_items$Rep_News == "Good News"], 0.25, na.rm = TRUE),
+    quantile(partisan_items$Conservative_Average[partisan_items$Rep_News == "Bad News"], 0.25, na.rm = TRUE)
+  ),
+  
+  Q3 = c(
+    quantile(partisan_items$Liberal_Average, 0.75, na.rm = TRUE),
+    quantile(partisan_items$Liberal_Average[partisan_items$Dem_News == "Good News"], 0.75, na.rm = TRUE),
+    quantile(partisan_items$Liberal_Average[partisan_items$Dem_News == "Bad News"], 0.75, na.rm = TRUE),
+    quantile(partisan_items$Conservative_Average, 0.75, na.rm = TRUE),
+    quantile(partisan_items$Conservative_Average[partisan_items$Rep_News == "Good News"], 0.75, na.rm = TRUE),
+    quantile(partisan_items$Conservative_Average[partisan_items$Rep_News == "Bad News"], 0.75, na.rm = TRUE)
+  ),
+  
+  Min = c(
+    min(partisan_items$Liberal_Average, na.rm = TRUE),
+    min(partisan_items$Liberal_Average[partisan_items$Dem_News == "Good News"], na.rm = TRUE),
+    min(partisan_items$Liberal_Average[partisan_items$Dem_News == "Bad News"], na.rm = TRUE),
+    min(partisan_items$Conservative_Average, na.rm = TRUE),
+    min(partisan_items$Conservative_Average[partisan_items$Rep_News == "Good News"], na.rm = TRUE),
+    min(partisan_items$Conservative_Average[partisan_items$Rep_News == "Bad News"], na.rm = TRUE)
+  ),
+  
+  Max = c(
+    max(partisan_items$Liberal_Average, na.rm = TRUE),
+    max(partisan_items$Liberal_Average[partisan_items$Dem_News == "Good News"], na.rm = TRUE),
+    max(partisan_items$Liberal_Average[partisan_items$Dem_News == "Bad News"], na.rm = TRUE),
+    max(partisan_items$Conservative_Average, na.rm = TRUE),
+    max(partisan_items$Conservative_Average[partisan_items$Rep_News == "Good News"], na.rm = TRUE),
+    max(partisan_items$Conservative_Average[partisan_items$Rep_News == "Bad News"], na.rm = TRUE)
   )
+)
+
+partisan_news_summary
+
+```
+
+```{r}
+df_favorability <- partisanship_data %>%
+  mutate(
+    Favorability = ifelse(Dem_Favorability > 0, "Democratic Favorable", "Republican Favorable")
+  ) %>%
+  select(Claim_Num, Favorability)
+
+truth_prob_cols <- paste0("TruthProb_Claim_", partisan_items$Claim_Num)
+
+df2_selected <- df2 %>%
+  select(all_of(truth_prob_cols), forcedPartyChoice) %>%
+  pivot_longer(
+    cols = starts_with("TruthProb_Claim_"),
+    names_to = "Claim",
+    values_to = "Truth_Prob"
+  ) %>%
+  mutate(
+    Claim = str_replace(Claim, "TruthProb_Claim_", ""), 
+    Claim_Num = as.integer(Claim) 
+  ) %>%
+  left_join(df_favorability, by = "Claim_Num") %>%
+  mutate(
+    Party = ifelse(forcedPartyChoice > 0, "Republican", "Democrat"),
+    Claim = paste0("Claim_", Claim)
+  )
+
+df2_selected <- df2_selected %>%
+  arrange(Favorability, Claim) %>%
+  mutate(Claim = factor(Claim, levels = unique(Claim)))
+
+ggplot(df2_selected, aes(x = Truth_Prob, fill = Party)) +
+  geom_histogram(bins = 5, color = "black", position = "stack", alpha = 0.7) +
+  facet_wrap(~ Claim) +
+  labs(
+    title = "Distribution of Truth Probability for Each Claim by Party Choice",
+    x = "Truth Probability",
+    y = "Frequency"
+  ) +
+  scale_fill_manual(values = c("Republican" = "red", "Democrat" = "blue")) +
+  theme_minimal()
 ```
 
 ```{r priorXfavorability, message = FALSE, warning= FALSE, eval = FALSE}
-ggplot(partisanship_data[1:61,]) +
+subset_data <- partisanship_data[1:61, ]
+
+ggplot(subset_data) +
   geom_point(aes(x = Dem_Favorability, y = Dem_Priors, color = 'Democrats')) +
   geom_smooth(aes(x = Dem_Favorability, y = Dem_Priors, color = 'Democrats'), 
               method = "lm", se = FALSE) +
@@ -585,6 +742,18 @@ ggplot(partisanship_data[1:61,]) +
   scale_y_continuous(breaks = seq(5, 80, by = 15), limits = c(4, 83)) +
   
   theme_minimal()
+
+dem_data <- filtered_data %>%
+  filter(Dem_Favorability > 0.5) %>%
+  mutate(Dem_Favorability = abs(Dem_Favorability))
+
+rep_data <- filtered_data %>%
+  filter(Rep_Favorability > 0.5) %>%
+  mutate(Rep_Favorability = abs(Rep_Favorability))
+
+
+
+
 ```
 
 
@@ -604,4 +773,37 @@ partisanship_summary <- data.frame(
 
 ```
 
+```{r}
+filtered_data <- partisanship_data %>%
+  filter(Dem_Favorability > 0.5 | Rep_Favorability > 0.5)
+
+# Plot with desired style and x-axis starting at 0.5
+ggplot(partisanship_data) +
+  geom_point(aes(x = abs(Dem_Favorability), y = D_Index, color = 'Democrats')) +
+  geom_smooth(aes(x = abs(Dem_Favorability), y = D_Index, color = 'Democrats'), 
+              method = "lm", se = FALSE) +
+  stat_regline_equation(aes(x = abs(Dem_Favorability), y = D_Index, label = ..eq.label..), 
+                        color = "blue", label.x = 0.7, label.y = 45) +
+  stat_regline_equation(aes(x = abs(Dem_Favorability), y = D_Index, label = ..rr.label..), 
+                        color = "blue", label.x = 0.7, label.y = 42) +
+  
+  geom_point(aes(x = abs(Rep_Favorability), y = R_Index, color = 'Republicans')) +
+  geom_smooth(aes(x = abs(Rep_Favorability), y = R_Index, color = 'Republicans'), 
+              method = "lm", se = FALSE) +
+  stat_regline_equation(aes(x = abs(Rep_Favorability), y = R_Index, label = ..eq.label..), 
+                        color = "red", label.x = 0.7, label.y = 55) +
+  stat_regline_equation(aes(x = abs(Rep_Favorability), y = R_Index, label = ..rr.label..), 
+                        color = "red", label.x = 0.7, label.y = 52) +
+  
+  labs(
+    x = "Absolute Party Favorability", 
+    y = "Partisan Verifiability", 
+    title = "Party Favorability of Political Claims Associated with Verifiability", 
+    color = "Affiliation"
+  ) +
+  
+  scale_color_manual(values = c('Democrats' = 'blue', 'Republicans' = 'red')) +
+  
+  theme_minimal()
+```
 
